@@ -21,7 +21,12 @@ COPY poetry.lock pyproject.toml poetry.toml ./
 RUN  poetry install --no-interaction --no-ansi --no-root --without dev,lint,extras
 
 
-FROM python:3.10-slim
+FROM builder as development
+RUN  poetry install --no-interaction --no-ansi --no-root
+ENV PATH="/app/.venv/bin:$PATH"
+
+
+FROM python:3.10-slim as prod_app
 
 WORKDIR /app
 

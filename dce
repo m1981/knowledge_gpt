@@ -1,0 +1,147 @@
+#!/bin/bash
+
+set -e
+
+usage() {
+    if [[ "$1" == "f" ]]; then
+        cat << EOF
+Usage: dce f [command]
+
+Frontend commands:
+
+EOF
+    elif [[ "$1" == "b" ]]; then
+        cat << EOF
+Usage: dce b [command]
+
+Backend commands:
+    console        Run console
+    build          Build Docker images for frontend without using cache.
+    dev-server     Start the frontend development server.
+    down           Take all services down
+    tests-ut       Run unit tests for backend services.
+    tests-int      Run integration tests for backend services.
+
+EOF
+    else
+        cat << EOF
+Usage: dce [b|f] [command]
+
+Specify 'b' for backend or 'f'
+
+EOF
+    fi
+    exit 1
+}
+
+
+
+
+
+# Main Script
+if [ $# -eq 0 ]; then
+    # No argument provided
+    usage
+elif [ $# -eq 1 ]; then
+    # One argument provided, expecting 'b' or 'f'
+    if [[ "$1" == "b" || "$1" == "f" ]]; then
+        usage $1
+    else
+        usage
+    fi
+fi
+
+case "$1" in
+    b)
+        COMPOSE_PATH="docker/backend"
+        ;;
+    f)
+        COMPOSE_PATH="docker/frontend"
+        ;;
+    *)
+        usage
+        ;;
+esac
+
+ENV_FILE="$COMPOSE_PATH/env.local"
+
+# Check if the env file exists before attempting to display its content
+if [ ! -f "$ENV_FILE" ]; then
+    echo "Environment file $ENV_FILE does not exist."
+    exit 1
+fi
+
+
+# Function to take down services
+take_services_down() {
+    echo "Taking down all services in $COMPOSE_PATH..."
+    docker-compose --env-file "$ENV_FILE" -f "$COMPOSE_PATH/compose_ci.yml" down
+}
+
+# Function to view service logs
+view_service_logs() {
+    local service_name=$1
+    echo "Viewing logs for $service_name..."
+    docker-compose --env-file "$ENV_FILE" -f "$COMPOSE_PATH/compose_ci.yml" logs -f $service_name
+}
+
+
+# Display the content of the environment variable file
+echo "===== Environment Variables ====="
+cat "$ENV_FILE"
+echo "================================="
+
+COMPOSE_OPTIONS="--ansi never --env-file $ENV_FILE -f"
+COMPOSE_FILE=""
+ACTION=""
+
+case "$2" in
+    down)
+        take_services_down
+        exit 0
+        ;;
+    console)
+        COMPOSE_FILE="$COMPOSE_PATH/compose_ci.yml"
+        ACTION="run console"
+        ;;
+    dev-server)
+        if [ "$1" != "f" ]; then
+            echo "dev-server is only available for the frontend."
+            exit 1
+        fi
+        COMPOSE_FILE="$COMPOSE_PATH/compose_ci.yml"
+        ACTION="up --remove-orphans dev-server"
+        ;;
+    build)
+        COMPOSE_FILE="$COMPOSE_PATH/compose_ci_build.yml"
+        ACTION="build --progress plain"
+        ;;
+    precommit)
+        if [ "$1" != "b" ]; then
+            echo "precommit is only available for the backend."
+            exit 1
+        fi
+        COMPOSE_FILE="$COMPOSE_PATH/compose_ci.yml"
+        ACTION="run precommit"
+        ;;
+    tests-ut)
+        COMPOSE_FILE="$COMPOSE_PATH/compose_ci.yml"
+        ACTION="run tests-ut"
+        ;;
+    tests-int)
+        if [ "$1" != "b" ]; then
+            echo "tests-int is only available for the backend."
+            exit 1
+        fi
+        COMPOSE_FILE="$COMPOSE_PATH/compose_ci.yml"
+        ACTION="run tests-int"
+        ;;
+    *)
+        usage
+        ;;
+esac
+
+FULL_COMMAND="docker-compose $COMPOSE_OPTIONS $COMPOSE_FILE $ACTION"
+echo "Executing command: $FULL_COMMAND"
+eval $FULL_COMMAND
+exit $?

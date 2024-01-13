@@ -1,0 +1,9 @@
+version: '3.4'
+
+services:
+  tests_build:
+    build:
+      context: ../../
+      dockerfile: docker/backend/Dockerfile
+      target: development
+    image: "${DOCKERHUB_USERNAME}/knowledge_gpt:${TAG_NAME}"
