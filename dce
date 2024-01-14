@@ -30,8 +30,23 @@ def get_user_choice(options, prompt):
 
 def print_available_options(options, title='Available options:'):
     print(title)
-    for option in sorted(options):
-        print(f"- {option}")
+    for index, option in enumerate(sorted(options), start=1):
+        print(f"{index}. {option}")
+
+def get_user_choice(options, prompt):
+    print_available_options(options, prompt)
+    while True:
+        choice_input = input("Enter your choice (number): ").strip()
+        try:
+            # Convert to 0-based index; raise ValueError if not a positive int
+            choice_index = int(choice_input) - 1
+            if choice_index >= 0 and choice_index < len(options):
+                # Return the corresponding option
+                return sorted(options)[choice_index]
+            else:
+                print("Choice out of range. Please try again.")
+        except ValueError:
+            print("Invalid choice. Please enter a number. Try again.")
 
 def get_nested_command_options(command_data, key):
     # Check if the command is nested and get nested options if so
