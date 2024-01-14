@@ -5,5 +5,5 @@ services:
     build:
       context: ../../
       dockerfile: docker/backend/Dockerfile
-      target: development
-    image: "${DOCKERHUB_USERNAME}/knowledge_gpt:${TAG_NAME}"
+      target: "${BUILD_TARGET}"
+    image: "${DOCKERHUB_USERNAME}/knowledge_gpt_${BUILD_TARGET}:${TAG_NAME}"

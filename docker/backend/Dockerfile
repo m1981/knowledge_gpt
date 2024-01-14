@@ -2,7 +2,7 @@
 FROM python:3.10-slim as builder
 
 ENV PYTHONFAULTHANDLER=1 \
-    PYTHONUNBUFFERED=1 \ 
+    PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     POETRY_VERSION=1.5.1 \
     PIP_NO_CACHE_DIR=1
@@ -21,18 +21,18 @@ COPY poetry.lock pyproject.toml poetry.toml ./
 RUN  poetry install --no-interaction --no-ansi --no-root --without dev,lint,extras
 
 
-FROM builder as development
+FROM builder as testing
 RUN  poetry install --no-interaction --no-ansi --no-root
 ENV PATH="/app/.venv/bin:$PATH"
 
 
-FROM python:3.10-slim as prod_app
+FROM python:3.10-slim as production
 
 WORKDIR /app
 
 COPY --from=builder /app /app
 
-COPY /knowledge_gpt ./knowledge_gpt 
+COPY /knowledge_gpt ./knowledge_gpt
 
 ENV PATH="/app/.venv/bin:$PATH"
 
