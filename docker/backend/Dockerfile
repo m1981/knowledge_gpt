@@ -25,6 +25,8 @@ FROM builder as testing
 RUN  poetry install --no-interaction --no-ansi --no-root
 ENV PATH="/app/.venv/bin:$PATH"
 
+FROM testing as development
+ENV PATH="/app/.venv/bin:$PATH"
 
 FROM python:3.10-slim as production
 

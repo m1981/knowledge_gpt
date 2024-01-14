@@ -61,7 +61,7 @@ class InfoDisplayer:
         overwritten_vars = set(env_from_file) & set(env_vars)
         env_from_file.update(env_vars)
 
-        print(f"{action.capitalize()}...")
+        print(f"\n{action.capitalize()}...")
         component = full_command.split()[-1]  # Assuming the component/service is the last argument
         print(f"    {component} ({service_choice})")
         print("Vars:")
@@ -70,6 +70,8 @@ class InfoDisplayer:
             overwritten = " (O)" if key in overwritten_vars else ""
             additional_text = " (Overwritten)" if overwritten else ""
             print(f"{overwritten}   {key}={value}{additional_text}")
+        #for
+        print(f"CMD: {full_command}")
         print()
 
 class CommandRunner:
