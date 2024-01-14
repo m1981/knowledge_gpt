@@ -1,0 +1,43 @@
+{
+  "services": {
+    "backend": {
+      "path": "docker/backend",
+      "env_file": "docker/backend/env.local",
+      "commands": {
+        "console": "compose_ci.yml run console",
+        "down": "compose_ci.yml down",
+        "tests-ut": "compose_ci.yml run tests-ut",
+        "tests-int": "compose_ci.yml run tests-int",
+        "precommit": "compose_ci.yml run precommit",
+        "build": {
+          "development": {
+            "env": {
+              "BUILD_TARGET": "development",
+            },
+            "command": "compose_ci_build.yml build --progress plain"
+          },
+          "testing": {
+            "env": {
+              "BUILD_TARGET": "testing",
+            },
+            "command": "compose_ci_build.yml build --progress plain"
+          },
+          "production": {
+            "env": {
+              "BUILD_TARGET": "production",
+            },
+            "command": "compose_ci_build.yml build --progress plain"
+          }
+        }
+      }
+    },
+    "frontend": {
+      "path": "docker/frontend",
+      "env_file": "docker/frontend/env.local",
+      "commands": {
+        "dev-server": "compose_ci.yml up --remove-orphans dev-server",
+        "down": "compose_ci.yml down"
+      }
+    }
+  }
+}

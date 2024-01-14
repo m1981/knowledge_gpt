@@ -1,147 +1,89 @@
-#!/bin/bash
+#!/usr/bin/env python3
 
-set -e
+import json
+import subprocess
+import os
+import sys
 
-usage() {
-    if [[ "$1" == "f" ]]; then
-        cat << EOF
-Usage: dce f [command]
+# Path to the JSON configuration file
+CONFIG_FILE = '.dce.json'
 
-Frontend commands:
+SCRIPT_NAME_INDEX = 0  # Index for script name
+SERVICE_ARG_INDEX = 1  # Index for service argument
+COMMAND_ARG_INDEX = 2  # Index for command argument
+NESTED_ARG_INDEX = 3   # Index for nested argument
 
-EOF
-    elif [[ "$1" == "b" ]]; then
-        cat << EOF
-Usage: dce b [command]
+def load_config(config_path):
+    with open(config_path, 'r') as json_file:
+        return json.load(json_file)
 
-Backend commands:
-    console        Run console
-    build          Build Docker images for frontend without using cache.
-    dev-server     Start the frontend development server.
-    down           Take all services down
-    tests-ut       Run unit tests for backend services.
-    tests-int      Run integration tests for backend services.
+def run_command(service, command, env_vars=None):
+    if env_vars:
+        for key, value in env_vars.items():
+            os.environ[key] = value
+    subprocess.run(command, shell=True)
 
-EOF
-    else
-        cat << EOF
-Usage: dce [b|f] [command]
+def get_user_choice(options, prompt):
+    print_available_options(options, prompt)
+    choice = input("Enter your choice: ").strip()
+    return choice if choice in options else None
 
-Specify 'b' for backend or 'f'
+def print_available_options(options, title='Available options:'):
+    print(title)
+    for option in sorted(options):
+        print(f"- {option}")
 
-EOF
-    fi
-    exit 1
-}
+def get_nested_command_options(command_data, key):
+    # Check if the command is nested and get nested options if so
+    if isinstance(command_data, dict) and all(isinstance(value, dict) for value in command_data.values()):
+        print(f"{key.capitalize()} options:")
+        return command_data.keys()
+    return []
 
+def main():
+    config = load_config(CONFIG_FILE)
 
+    if len(sys.argv) < SERVICE_ARG_INDEX+1 or sys.argv[SERVICE_ARG_INDEX] not in config['services']:
+        # No valid service provided as argument, prompt the user
+        service_choice = get_user_choice(config['services'], "Select a service:")
+        if not service_choice:
+            print("No valid service provided.")
+            sys.exit(1)
+    else:
+        service_choice = sys.argv[SERVICE_ARG_INDEX]
 
+    service = config['services'][service_choice]
 
+    if len(sys.argv) < COMMAND_ARG_INDEX+1 or sys.argv[COMMAND_ARG_INDEX] not in service['commands']:
+        # No valid command provided as argument, prompt the user
+        command_choice = get_user_choice(service['commands'], f"Select a command for {service_choice}:")
+        if not command_choice:
+            print(f"No valid command provided for {service_choice}.")
+            sys.exit(1)
+    else:
+        command_choice = sys.argv[COMMAND_ARG_INDEX]
 
-# Main Script
-if [ $# -eq 0 ]; then
-    # No argument provided
-    usage
-elif [ $# -eq 1 ]; then
-    # One argument provided, expecting 'b' or 'f'
-    if [[ "$1" == "b" || "$1" == "f" ]]; then
-        usage $1
-    else
-        usage
-    fi
-fi
+    command_data = service['commands'][command_choice]
+    env_vars = {}
+    command = ""
 
-case "$1" in
-    b)
-        COMPOSE_PATH="docker/backend"
-        ;;
-    f)
-        COMPOSE_PATH="docker/frontend"
-        ;;
-    *)
-        usage
-        ;;
-esac
+    # Handle nested command options
+    nested_options = get_nested_command_options(command_data, command_choice)
+    if nested_options:
+        if len(sys.argv) < NESTED_ARG_INDEX+1 or sys.argv[NESTED_ARG_INDEX] not in nested_options:
+            nested_choice = get_user_choice(nested_options, f"Select an option for {command_choice}:")
+            if not nested_choice:
+                print(f"No valid option provided for {command_choice}.")
+                sys.exit(1)
+        else:
+            nested_choice = sys.argv[NESTED_ARG_INDEX]
+        env_vars = command_data[nested_choice].get('env', {})
+        command = command_data[nested_choice]['command']
+    else:
+        command = command_data
 
-ENV_FILE="$COMPOSE_PATH/env.local"
+    full_command = f"docker-compose --env-file {service['env_file']} -f {service['path']}/{command}"
+    run_command(service_choice, full_command, env_vars)
 
-# Check if the env file exists before attempting to display its content
-if [ ! -f "$ENV_FILE" ]; then
-    echo "Environment file $ENV_FILE does not exist."
-    exit 1
-fi
-
-
-# Function to take down services
-take_services_down() {
-    echo "Taking down all services in $COMPOSE_PATH..."
-    docker-compose --env-file "$ENV_FILE" -f "$COMPOSE_PATH/compose_ci.yml" down
-}
-
-# Function to view service logs
-view_service_logs() {
-    local service_name=$1
-    echo "Viewing logs for $service_name..."
-    docker-compose --env-file "$ENV_FILE" -f "$COMPOSE_PATH/compose_ci.yml" logs -f $service_name
-}
-
-
-# Display the content of the environment variable file
-echo "===== Environment Variables ====="
-cat "$ENV_FILE"
-echo "================================="
-
-COMPOSE_OPTIONS="--ansi never --env-file $ENV_FILE -f"
-COMPOSE_FILE=""
-ACTION=""
-
-case "$2" in
-    down)
-        take_services_down
-        exit 0
-        ;;
-    console)
-        COMPOSE_FILE="$COMPOSE_PATH/compose_ci.yml"
-        ACTION="run console"
-        ;;
-    dev-server)
-        if [ "$1" != "f" ]; then
-            echo "dev-server is only available for the frontend."
-            exit 1
-        fi
-        COMPOSE_FILE="$COMPOSE_PATH/compose_ci.yml"
-        ACTION="up --remove-orphans dev-server"
-        ;;
-    build)
-        COMPOSE_FILE="$COMPOSE_PATH/compose_ci_build.yml"
-        ACTION="build --progress plain"
-        ;;
-    precommit)
-        if [ "$1" != "b" ]; then
-            echo "precommit is only available for the backend."
-            exit 1
-        fi
-        COMPOSE_FILE="$COMPOSE_PATH/compose_ci.yml"
-        ACTION="run precommit"
-        ;;
-    tests-ut)
-        COMPOSE_FILE="$COMPOSE_PATH/compose_ci.yml"
-        ACTION="run tests-ut"
-        ;;
-    tests-int)
-        if [ "$1" != "b" ]; then
-            echo "tests-int is only available for the backend."
-            exit 1
-        fi
-        COMPOSE_FILE="$COMPOSE_PATH/compose_ci.yml"
-        ACTION="run tests-int"
-        ;;
-    *)
-        usage
-        ;;
-esac
-
-FULL_COMMAND="docker-compose $COMPOSE_OPTIONS $COMPOSE_FILE $ACTION"
-echo "Executing command: $FULL_COMMAND"
-eval $FULL_COMMAND
-exit $?
+if __name__ == "__main__":
+    main()
