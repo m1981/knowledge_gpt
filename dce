@@ -4,101 +4,131 @@ import json
 import subprocess
 import os
 import sys
+import re
 
 # Path to the JSON configuration file
 CONFIG_FILE = '.dce.json'
 
-SCRIPT_NAME_INDEX = 0  # Index for script name
-SERVICE_ARG_INDEX = 1  # Index for service argument
-COMMAND_ARG_INDEX = 2  # Index for command argument
-NESTED_ARG_INDEX = 3   # Index for nested argument
 
-def load_config(config_path):
-    with open(config_path, 'r') as json_file:
-        return json.load(json_file)
+class ConfigLoader:
+    @staticmethod
+    def load(config_path):
+        with open(config_path, 'r') as json_file:
+            return json.load(json_file)
 
-def run_command(service, command, env_vars=None):
-    if env_vars:
-        for key, value in env_vars.items():
-            os.environ[key] = value
-    subprocess.run(command, shell=True)
 
-def get_user_choice(options, prompt):
-    print_available_options(options, prompt)
-    choice = input("Enter your choice: ").strip()
-    return choice if choice in options else None
+class EnvironmentFileParser:
+    @staticmethod
+    def parse(env_file_path):
+        env_dict = {}
+        with open(env_file_path, 'r') as file:
+            for line in file:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    key, value = line.split('=', 1)
+                    env_dict[key] = value
+        return env_dict
 
-def print_available_options(options, title='Available options:'):
-    print(title)
-    for index, option in enumerate(sorted(options), start=1):
-        print(f"{index}. {option}")
 
-def get_user_choice(options, prompt):
-    print_available_options(options, prompt)
-    while True:
-        choice_input = input("Enter your choice (number): ").strip()
-        try:
-            # Convert to 0-based index; raise ValueError if not a positive int
-            choice_index = int(choice_input) - 1
-            if choice_index >= 0 and choice_index < len(options):
-                # Return the corresponding option
-                return sorted(options)[choice_index]
-            else:
-                print("Choice out of range. Please try again.")
-        except ValueError:
-            print("Invalid choice. Please enter a number. Try again.")
+class UserInteractions:
+    @staticmethod
+    def get_user_choice(options, prompt):
+        print(prompt)
+        for index, option in enumerate(sorted(options), start=1):
+            print(f"{index}. {option}")
+        while True:
+            choice_input = input("Enter your choice (number): ").strip()
+            try:
+                choice_index = int(choice_input) - 1
+                if choice_index >= 0 and choice_index < len(options):
+                    return sorted(options)[choice_index]
+                else:
+                    print("Choice out of range. Please try again.")
+            except ValueError:
+                print("Invalid choice. Please enter a number. Try again.")
 
-def get_nested_command_options(command_data, key):
-    # Check if the command is nested and get nested options if so
-    if isinstance(command_data, dict) and all(isinstance(value, dict) for value in command_data.values()):
-        print(f"{key.capitalize()} options:")
-        return command_data.keys()
-    return []
+class InfoDisplayer:
+    @staticmethod
+    def extract_docker_compose_action(full_command):
+        # Use regex to find the action in the full command string
+        match = re.search(r'\b(up|run|build|down)\b', full_command)
+        return match.group(1) if match else 'Executing'
 
-def main():
-    config = load_config(CONFIG_FILE)
+    @staticmethod
+    def show_info(service_choice, full_command, env_file, env_vars):
+        action = InfoDisplayer.extract_docker_compose_action(full_command)
+        env_from_file = EnvironmentFileParser.parse(env_file)
+        overwritten_vars = set(env_from_file) & set(env_vars)
+        env_from_file.update(env_vars)
 
-    if len(sys.argv) < SERVICE_ARG_INDEX+1 or sys.argv[SERVICE_ARG_INDEX] not in config['services']:
-        # No valid service provided as argument, prompt the user
-        service_choice = get_user_choice(config['services'], "Select a service:")
+        print(f"{action.capitalize()}...")
+        component = full_command.split()[-1]  # Assuming the component/service is the last argument
+        print(f"    {component} ({service_choice})")
+        print("Vars:")
+        for key, value in sorted(env_from_file.items()):
+            # Annotate overwritten variables with (O)
+            overwritten = " (O)" if key in overwritten_vars else ""
+            additional_text = " (Overwritten)" if overwritten else ""
+            print(f"{overwritten}   {key}={value}{additional_text}")
+        print()
+
+class CommandRunner:
+    def run(self, command, env_vars=None):
+        if env_vars:
+            for key, value in env_vars.items():
+                os.environ[key] = value
+        subprocess.run(command, shell=True)
+
+
+def determine_service_choice(config, args, user_interactions):
+    if len(args) < 2 or args[1] not in config['services']:
+        service_choice = user_interactions.get_user_choice(config['services'], "Select a service:")
         if not service_choice:
             print("No valid service provided.")
             sys.exit(1)
     else:
-        service_choice = sys.argv[SERVICE_ARG_INDEX]
+        service_choice = args[1]
+    return service_choice
 
-    service = config['services'][service_choice]
 
-    if len(sys.argv) < COMMAND_ARG_INDEX+1 or sys.argv[COMMAND_ARG_INDEX] not in service['commands']:
-        # No valid command provided as argument, prompt the user
-        command_choice = get_user_choice(service['commands'], f"Select a command for {service_choice}:")
+def determine_command_choice(service, args, user_interactions):
+    if len(args) < 3 or args[2] not in service['commands']:
+        command_choice = user_interactions.get_user_choice(service['commands'], "Select a command:")
         if not command_choice:
-            print(f"No valid command provided for {service_choice}.")
+            print("No valid command provided.")
             sys.exit(1)
     else:
-        command_choice = sys.argv[COMMAND_ARG_INDEX]
+        command_choice = args[2]
+    return command_choice
 
-    command_data = service['commands'][command_choice]
-    env_vars = {}
-    command = ""
 
-    # Handle nested command options
-    nested_options = get_nested_command_options(command_data, command_choice)
-    if nested_options:
-        if len(sys.argv) < NESTED_ARG_INDEX+1 or sys.argv[NESTED_ARG_INDEX] not in nested_options:
-            nested_choice = get_user_choice(nested_options, f"Select an option for {command_choice}:")
-            if not nested_choice:
-                print(f"No valid option provided for {command_choice}.")
-                sys.exit(1)
-        else:
-            nested_choice = sys.argv[NESTED_ARG_INDEX]
-        env_vars = command_data[nested_choice].get('env', {})
-        command = command_data[nested_choice]['command']
+def extract_command_data(command_config):
+    # If command_config is a dictionary, it includes 'env' and 'command' keys.
+    if isinstance(command_config, dict):
+        return command_config.get('env', {}), command_config['command']
+    # If command_config is a string, it's a direct command without additional env vars.
     else:
-        command = command_data
+        return {}, command_config
+
+def main(command_runner, config_loader, user_interactions, info_displayer):
+    config = config_loader.load(CONFIG_FILE)
+
+    service_choice = determine_service_choice(config, sys.argv, user_interactions)
+    service = config['services'][service_choice]
+    command_choice = determine_command_choice(service, sys.argv, user_interactions)
+    command_data = service['commands'][command_choice]
+
+    env_vars, command = extract_command_data(command_data)
 
     full_command = f"docker-compose --env-file {service['env_file']} -f {service['path']}/{command}"
-    run_command(service_choice, full_command, env_vars)
+
+    info_displayer.show_info(service_choice, full_command, service['env_file'], env_vars)
+    command_runner.run(full_command, env_vars)
 
 if __name__ == "__main__":
-    main()
+    command_runner = CommandRunner()
+    config_loader = ConfigLoader()
+    user_interactions = UserInteractions()
+    info_displayer = InfoDisplayer()
+
+    main(command_runner, config_loader, user_interactions, info_displayer)
