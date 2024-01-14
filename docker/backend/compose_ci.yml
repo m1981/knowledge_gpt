@@ -1,16 +1,6 @@
 version: '3.4'
 
 services:
-  console:
-    image: ${TESTS_IMAGE:?err}
-    volumes:
-      - ${SOURCE_DIR:?err}/knowledge_gpt:/app/knowledge_gpt
-      - ${SOURCE_DIR:?err}/tests:/app/tests
-      - ${SOURCE_DIR:?err}/resources:/app/resources
-      - ${SOURCE_DIR:?err}/poetry.lock:/app/poetry.lock
-      - ${SOURCE_DIR:?err}/pyproject.toml:/app/pyproject.toml
-    command: ["bash"]
-
   tests-ut:
     image: ${TESTS_IMAGE:?err}
     volumes:
@@ -26,13 +16,9 @@ services:
 
 
   dev-server:
-    image: ${TESTS_IMAGE:?err}
+    image: ${DEV_IMAGE:?err}
     ports:
-      - "5173:5173"
-    environment:
-      - VITE_FIREBASE_AUTH_EMULATOR_HOST=firebase-emulators:9099
-      - VITE_FIRESTORE_EMULATOR_HOST=firebase-emulators:8080
+      - 8501:8501
     volumes:
-      - ${SOURCE_DIR:?err}:/app
-      - /app/node_modules
-    command: ["sh", "-c", "yarn dev"]
+      - ${SOURCE_DIR:?err}/knowledge_gpt:/app/knowledge_gpt
+    command: ["bash", "-c", "pwd && python -m streamlit run knowledge_gpt/main.py --server.port=8501 --server.address=0.0.0.0"]
