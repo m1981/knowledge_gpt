@@ -1,9 +1,9 @@
 version: '3.4'
 
 services:
-  tests_build:
+  build_image:
     build:
       context: ../../
       dockerfile: docker/backend/Dockerfile
-      target: "${BUILD_TARGET}"
-    image: "${DOCKERHUB_USERNAME}/knowledge_gpt_${BUILD_TARGET}:${TAG_NAME}"
+      target: "${BUILD_TARGET:?err}"
+    image: "${DOCKERHUB_USERNAME:?err}/knowledge_gpt_${BUILD_TARGET:?err}:${BUILD_TAG_NAME:?err}"
