@@ -9,7 +9,7 @@
         "tests-ut": "compose_ci.yml run tests-ut",
         "tests-int": "compose_ci.yml run tests-int",
         "precommit": "compose_ci.yml run precommit",
-        "dev-server": "compose_ci.yml run --service-ports dev-server",
+        "dev-server": "compose_ci.yml up --remove-orphans dev-server",
         "down": "compose_ci.yml down",
         "build": {
           "development": {
